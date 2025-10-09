@@ -1,0 +1,1 @@
+Error in processing_for_picture loop 0: Node is not writable. : AccessException thrown in node 'UserOutputValueAll' while calling 'UserOutputValueAll.SetValue()' (file 'IntegerT.h', line 77)
