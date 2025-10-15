@@ -21,9 +21,9 @@ from langchain.agents import initialize_agent, AgentType
 from langchain.memory import ConversationBufferMemory 
 import streamlit as st # Bắt buộc phải import Streamlit
 
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 
-# load_dotenv()
+load_dotenv()
 
 def get_retriever() -> EnsembleRetriever:
     """
@@ -69,21 +69,30 @@ def get_local_llm() -> ChatOpenAI:
     # (ví dụ: 192.168.1.60) hoặc 0.0.0.0/localhost nếu gọi từ cùng máy.
     # Sử dụng IP mạng nội bộ của bạn (ví dụ: 192.168.1.60) để các máy khác có thể gọi.
     
-    BASE_URL = "http://192.168.122.1:8001/v1" # "http://127.0.0.1:8001/v1"  Hoặc "http://192.168.1.60:8001/v1"
+    BASE_URL = "http://192.168.1.83:8001/v1" # "http://127.0.0.1:8001/v1"  Hoặc "http://192.168.1.83:8001/v1"
+    BASE_URL_OLLAMA = "http://192.168.1.83:11434/v1" 
 
     # 2. Khởi tạo ChatOpenAI client
     # llama_cpp.server mô phỏng API của OpenAI.
-    llm = ChatOpenAI(
-        model="vietnamese-llama2-7b-40gb.Q8_0.gguf", # Tên model tùy ý, miễn là server đang chạy
-        openai_api_base=BASE_URL,
-        openai_api_key="sk-not-required",  # Khóa API không cần thiết cho server nội bộ
-        temperature=0,
-        streaming=True,
-        # Các tham số khác như n_ctx, n_gpu_layers KHÔNG được truyền ở đây, 
-        # vì chúng đã được định cấu hình trên server (bằng lệnh --n_gpu_layers 33)
-    )
-    
-    return llm
+    def get_ollama_llm() -> ChatOpenAI:
+        try:
+            llm = ChatOpenAI(
+                model="deepseek-coder:8b", 
+                openai_api_base=BASE_URL_OLLAMA,
+                openai_api_key="sk-not-required",
+                temperature=0.7,
+                streaming=True,
+                max_tokens=2048,
+            )
+            # Đảm bảo có lệnh return này!
+            return llm 
+        except Exception as e:
+            # Nếu có lỗi ở đây, hàm sẽ thoát và trả về None.
+            # Nên xử lý lỗi (ví dụ: in ra thông báo lỗi) nhưng không return None.
+            print(f"Lỗi khởi tạo LLM: {e}")
+            # Nếu không thể khởi tạo, bạn có thể return None, nhưng hãy xử lý nó sau này
+            # Ví dụ: raise e
+            return None # <-- Nếu bạn có dòng này, code gọi phải kiểm tra nó.
 
 
 # Tạo công cụ tìm kiếm cho agent
@@ -133,11 +142,15 @@ if __name__ == "__main__":
     # ----------------------------------------------------
     # Phần code để test LLM với câu hỏi của bạn (Sử dụng .stream())
     # ----------------------------------------------------
-    question = "nước mỹ nằm châu lục nào"
+    question = "Cho tôi một bài thơ hay về núi"
     
     # 1. Tạo một tin nhắn (message) từ người dùng
-    from langchain.schema import HumanMessage
-    messages = [HumanMessage(content=question)]
+    from langchain.schema import HumanMessage, SystemMessage
+
+    messages = [
+    SystemMessage(content="Bạn là một nhà thơ tài năng và chuyên nghiệp. Hãy trả lời các yêu cầu bằng một bài thơ độc đáo."),
+    HumanMessage(content=question)
+]
     
     print(f"Câu hỏi: {question}\n")
     print("--- Phản hồi từ LLM (Streaming) ---")

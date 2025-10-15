@@ -3,10 +3,10 @@ import json
 from langchain_openai import OpenAIEmbeddings
 from langchain_milvus import Milvus
 from langchain.schema import Document
-from dotenv import load_dotenv
+
 from uuid import uuid4
 # from crawl import crawl_web
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 from langchain_community.document_loaders import (
     PyPDFLoader,
@@ -22,11 +22,14 @@ from pymilvus import connections, Collection, CollectionSchema, FieldSchema, Dat
 
 import nltk
 nltk.download('averaged_perceptron_tagger_eng')
+from dotenv import load_dotenv
+load_dotenv()
 
 from craw_data import load_data_from_local, crawl_web
 
 # Khởi tạo model embeddings
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# embeddings = HuggingFaceEmbeddings(model_name="google/embeddinggemma-300m")
 
 
 def seed_milvus_local(URI_link: str, collection_name: str, filenames: list, directory: str) -> Milvus:
