@@ -20,7 +20,7 @@
 - Nên dùng conda, setup environment qua câu lệnh: conda create -n myenv python=3.8.18
 - Sau đó active enviroment qua câu lệnh: conda activate myenv
 - Mở Terminal/Command Prompt và chạy lệnh sau:
-  - pip install langchain langchain-core langchain-community langchain-openai python-dotenv beautifulsoup4 langchain_milvus streamlit rank_bm25
+  - pip install langchain langchain-core langchain-community langchain-openai python-dotenv beautifulsoup4 langchain_milvus streamlit rank_bm25 pypdf
 
 > 💡 Nếu gặp lỗi thiếu thư viện, chạy: `pip install tên-thư-viện-còn-thiếu`
 
@@ -35,7 +35,7 @@
 
 Option: Cài đặt attu để view data đã seed vào Milvus:
 1. Chạy lệnh: docker run -p 8000:3000 -e MILVUS_URL={milvus server IP}:19530 zilliz/attu:v2.4
-   docker run -p 8000:3000 -e MILVUS_URL=172.20.32.1:19530 zilliz/attu
+   docker run -p 8000:3000 -e MILVUS_URL=192.168.1.4:19530 zilliz/attu window
    docker run -p 8000:3000 -e MILVUS_URL=192.168.1.60:19530 zilliz/attu
    accept: http://localhost:8080
 

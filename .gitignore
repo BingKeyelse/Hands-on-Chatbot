@@ -1,4 +1,5 @@
 volumes/
+volumes/minio/
 src/Data_restore
 src/model_llm
 .env
