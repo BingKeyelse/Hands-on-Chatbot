@@ -59,37 +59,17 @@ def get_retriever() -> EnsembleRetriever:
     )
     return bm25_retriever
 
-# --- KHỞI TẠO LLM (BẮT BUỘC PHẢI CACHE ĐỂ TRÁNH LOAD VRAM) ---
-# Tên hàm đã được thay đổi để khớp với LLM
-# @st.cache_resource(show_spinner="Đang tải Model LlamaCpp vào GPU P100 (Chỉ lần đầu)... 🚀")
-# def get_local_llm() -> ChatLlamaCpp:
-#     """
-#     Tải mô hình ChatLlamaCpp vào VRAM GPU một lần duy nhất.
-#     """
-#     # LLM sẽ được giữ trong VRAM sau lần load đầu tiên
-#     llm = ChatLlamaCpp(
-#         model_path='vietnamese-llama2-7b-40gb.Q8_0.gguf',
-#         temperature=0,
-#         streaming=True,
-#         n_ctx=4096,
-#         # THAM SỐ CỰC KỲ QUAN TRỌNG CHO GPU P100
-#         n_gpu_layers=33, # Đảm bảo toàn bộ model được offload lên P100 (cho Mistral 7B)
-#         verbose=True
-#     )
-#     return llm
-
 def get_local_llm() -> ChatOpenAI:
     """
     Kết nối tới mô hình LLM đã được expose qua API Server.
     Sử dụng ChatOpenAI để gọi API.
     """
-    
     # 1. Khai báo URL của server API đã chạy:
     # Do bạn chạy trên 0.0.0.0:8001, bạn có thể dùng địa chỉ IP cụ thể của máy chủ
     # (ví dụ: 192.168.1.60) hoặc 0.0.0.0/localhost nếu gọi từ cùng máy.
     # Sử dụng IP mạng nội bộ của bạn (ví dụ: 192.168.1.60) để các máy khác có thể gọi.
     
-    BASE_URL = "http://127.0.0.1:8001/v1"  # Hoặc "http://192.168.1.60:8001/v1"
+    BASE_URL = "http://192.168.122.1:8001/v1" # "http://127.0.0.1:8001/v1"  Hoặc "http://192.168.1.60:8001/v1"
 
     # 2. Khởi tạo ChatOpenAI client
     # llama_cpp.server mô phỏng API của OpenAI.
@@ -126,43 +106,7 @@ def get_tools(retriever):
         )
     ]
 
-# @st.cache_resource(show_spinner="Khoi tao get_llm_and_agent lan dau 🚀")
-# def get_llm_and_agent(_retriever, llm) -> AgentExecutor:
-#     """
-#     Khởi tạo Language Model và Agent với cấu hình cụ thể
-#     Args:
-#         _retriever: Retriever đã được cấu hình để tìm kiếm thông tin
-#     Returns:
-#         AgentExecutor: Agent đã được cấu hình với:
-#             - Model: GPT-4
-#             - Temperature: 0
-#             - Streaming: Enabled
-#             - Custom system prompt
-#     Chú ý:
-#         - Yêu cầu OPENAI_API_KEY đã được cấu hình
-#         - Agent được thiết lập với tên "ChatchatAI"
-#         - Sử dụng chat history để duy trì ngữ cảnh hội thoại
-#     """
-    
-    
-#     # Thiết lập prompt template cho agent
-#     system = """You are an expert at AI. Your name is ChatchatAI.
-    
-#         You MUST always first use the provided 'find' tool to search for context 
-#         and detailed information before attempting to answer ANY user question.
-#         Only answer the question based on the facts you retrieve.
-#         If the tool returns no relevant information, state that you cannot find the answer.
-#         """
-#     prompt = ChatPromptTemplate.from_messages([
-#         ("system", system),
-#         MessagesPlaceholder(variable_name="chat_history"),
-#         ("human", "{input}"),
-#         MessagesPlaceholder(variable_name="agent_scratchpad"),
-#     ])
 
-#     # Tạo và trả về agent
-#     agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
-#     return AgentExecutor(agent=agent, tools=tools, verbose=False)
 def get_llm_and_agent(_retriever, llm) -> AgentExecutor:
     
     # 1. KHỞI TẠO TOOLS
@@ -181,7 +125,38 @@ def get_llm_and_agent(_retriever, llm) -> AgentExecutor:
         handle_parsing_errors=True
     )
 
-# # Khởi tạo retriever và agent
-# retriever = get_retriever()
-# llm= get_local_llm()
-# agent_executor = get_llm_and_agent(retriever, llm)
+if __name__ == "__main__":
+    # Khởi tạo retriever và agent
+    # retriever = get_retriever()
+    llm= get_local_llm()
+    # agent_executor = get_llm_and_agent(retriever, llm)
+    # ----------------------------------------------------
+    # Phần code để test LLM với câu hỏi của bạn (Sử dụng .stream())
+    # ----------------------------------------------------
+    question = "nước mỹ nằm châu lục nào"
+    
+    # 1. Tạo một tin nhắn (message) từ người dùng
+    from langchain.schema import HumanMessage
+    messages = [HumanMessage(content=question)]
+    
+    print(f"Câu hỏi: {question}\n")
+    print("--- Phản hồi từ LLM (Streaming) ---")
+    
+    # 2. Gọi mô hình LLM sử dụng .stream()
+    try:
+        # Sử dụng .stream() để nhận generator
+        response_stream = llm.stream(messages)
+        
+        # 3. Lặp qua generator và in từng phần
+        for chunk in response_stream:
+            # chunk.content chứa phần văn bản nhỏ
+            print(chunk.content, end="", flush=True)
+            
+        # 4. In một dòng mới sau khi stream kết thúc
+        print() 
+        
+    except Exception as e:
+        print(f"\nĐã xảy ra lỗi khi gọi LLM: {e}")
+        print("Vui lòng kiểm tra lại server API của bạn (địa chỉ IP và cổng).")
+    
+    print("-----------------------------------")
