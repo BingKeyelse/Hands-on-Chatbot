@@ -1,8 +1,18 @@
 import streamlit as st  # Thư viện tạo giao diện web
 import time
-from langchain.memory import StreamlitChatMessageHistory  # Lưu lịch sử chat
+# from langchain.memory import StreamlitChatMessageHistory  # Lưu lịch sử chat
+from langchain_community.chat_message_histories import StreamlitChatMessageHistory # Lưu lịch sử chat
 import os
-from seed_data import seed_milvus_local
+# from langchain.callbacks import StreamlitCallbackHandler  # Hiển thị kết quả realtime
+from langchain_community.callbacks.streamlit import StreamlitCallbackHandler # Hiển thị kết quả realtime
+
+from seed_data import seed_milvus_local, seed_milvus_live
+from agent import get_retriever, get_llm_and_agent, get_local_llm  # Khởi tạo AI
+
+# streamlit run web.py
+# streamlit run web.py --server.address 0.0.0.0 --server.port 8501
+
+
 
 # === THIẾT LẬP GIAO DIỆN TRANG WEB ===
 def setup_page():
@@ -61,14 +71,13 @@ def handle_local_file():
                                         accept_multiple_files=True,
                                         type=["pdf", "txt", "docx", "csv", "md"]
                                         )
-
     if uploaded_files:
         data=[]
         for uploaded_file in uploaded_files:
             save_path = os.path.join('Data_restore', uploaded_file.name)
             data.append(uploaded_file.name)
 
-            # Ghi dữ liệu ra file
+            # Write file into folder Data_restore to read after
             with open(save_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
@@ -86,8 +95,7 @@ def handle_url_input():
     url = st.text_input("Nhập URL:", "https://www.stack-ai.com/docs")
     if st.button("Crawl dữ liệu"):
         with st.spinner("Đang crawl dữ liệu..."):
-            pass
-            # seed_milvus_live(url, 'http://localhost:19530', 'data_test_live_v2', 'stack-ai')
+            seed_milvus_live(url, 'http://localhost:19530', 'database')
         st.success("Đã crawl dữ liệu thành công!")
 
 # === GIAO DIỆN CHAT CHÍNH ===
@@ -102,14 +110,21 @@ def setup_chat_interface():
     st.caption("🚀 Trợ lý AI được hỗ trợ bởi LangChain và OpenAI")
 
     # Khởi tạo bộ nhớ chat
-    msgs = StreamlitChatMessageHistory(key="langchain_messages")
+    msgs = StreamlitChatMessageHistory(key="chat_messages")
     
-    # Tạo tin nhắn chào mừng nếu là chat mới
+    # BƯỚC 1: KHỞI TẠO st.session_state.messages NẾU CHƯA TỒN TẠI
     if "messages" not in st.session_state:
-        st.session_state.messages = [
-            {"role": "assistant", "content": "Tôi có thể giúp gì cho bạn?"}
-        ]
-        msgs.add_ai_message("Tôi có thể giúp gì cho bạn?")
+        st.session_state.messages = [] # Khởi tạo danh sách rỗng
+
+    # BƯỚC 2: KHỞI TẠO StreamlitChatMessageHistory (sẽ liên kết với st.session_state.messages)
+    msgs = StreamlitChatMessageHistory(key="chat_messages") 
+    
+    # BƯỚC 3: ĐỒNG BỘ TIN NHẮN CHÀO MỪNG (Nếu lịch sử chat hoàn toàn trống)
+    if len(st.session_state.messages) == 0:
+        greeting = "Tôi có thể giúp gì cho bạn?"
+        st.session_state.messages.append({"role": "assistant", "content": greeting})
+        # Quan trọng: Add vào msgs để đồng bộ với LangChain/Agent Executor
+        msgs.add_ai_message(greeting) 
 
     # Hiển thị lịch sử chat
     for msg in st.session_state.messages:
@@ -119,18 +134,30 @@ def setup_chat_interface():
     return msgs
 
 # === XỬ LÝ TIN NHẮN NGƯỜI DÙNG ===
-def handle_user_input(msgs):
-    """
-    Xử lý khi người dùng gửi tin nhắn:
-    1. Hiển thị tin nhắn người dùng
-    2. Gọi AI xử lý và trả lời
-    3. Lưu vào lịch sử chat
-    """
+# HÀM CHỈ NHẬN agent_executor
+def handle_user_input(agent_executor): 
+    
     if prompt := st.chat_input("Hãy hỏi tôi bất cứ điều gì về Stack AI!"):
         # Lưu và hiển thị tin nhắn người dùng
         st.session_state.messages.append({"role": "human", "content": prompt})
-        st.chat_message("human").write(prompt) # cho vai trò và prompt mình nhập
-        msgs.add_user_message(prompt)
+        st.chat_message("human").write(prompt)
+        # ❌ Đảm bảo bạn đã XÓA DÒNG NÀY: msgs.add_user_message(prompt)
+
+        # Xử lý và hiển thị câu trả lời
+        with st.chat_message("assistant"):
+            st_callback = StreamlitCallbackHandler(st.empty()) 
+            
+            # GỌI AI CHỈ VỚI INPUT
+            response = agent_executor.invoke(
+                {"input": prompt}, # <-- PHẢI CHỈ CÓ INPUT!
+                {"callbacks": [st_callback]}
+            )
+
+            # Lưu và hiển thị câu trả lời
+            output = response["output"]
+            st.session_state.messages.append({"role": "assistant", "content": output})
+            # ❌ Đảm bảo bạn đã XÓA DÒNG NÀY: msgs.add_ai_message(output)
+            st.write(output)
 
 # === HÀM CHÍNH ===
 def main():
@@ -142,11 +169,60 @@ def main():
     """
     initialize_app()
     setup_sidebar()
-    # msgs = setup_chat_interface()
+    
+    # 💡 SỬA: CHỈ GỌI setup_chat_interface(), KHÔNG GÁN VÀ SỬ DỤNG MSGS NỮA
+    setup_chat_interface() 
 
-    # # Xử lý chat
-    # handle_user_input(msgs)
+    retriever = get_retriever()
+    llm_instance = get_local_llm()
+    # Agent Executor đã có Memory riêng (ConversationBufferMemory)
+    agent_executor = get_llm_and_agent(retriever, llm_instance) 
+
+    # 💡 SỬA: CHỈ GỌI HÀM VỚI agent_executor
+    handle_user_input(agent_executor) 
+
+def test_retriever_query(query: str):
+    """
+    Hàm test truy vấn trực tiếp Retriever
+    """
+    print(f"\n--- 🔎 ĐANG TRUY VẤN: '{query}' ---")
+    
+    try:
+        # Lấy retriever đã được cấu hình (EnsembleRetriever)
+        retriever = get_retriever()
+        
+        # ⚠️ SỬ DỤNG PHƯƠNG THỨC invoke()
+        # Đối với LangChain v0.2, invoke() là cách được khuyến nghị
+        results = retriever.invoke(query)
+        
+        # In kết quả
+        print(f"✅ Đã tìm thấy {len(results)} tài liệu:")
+        for i, doc in enumerate(results):
+            # In nội dung ngắn gọn và nguồn
+            content_snippet = doc.page_content[:200] + "..."
+            source = doc.metadata.get('source', 'N/A')
+            print(f"--- Document {i+1} ---")
+            print(f"Nguồn: {source}")
+            # print(f"Nội dung: {content_snippet}")
+            print("-" * 15)
+
+    except Exception as e:
+        print(f"❌ Lỗi xảy ra khi truy vấn Retriever: {e}")
+        print("Vui lòng đảm bảo Milvus server đang chạy tại localhost:19530")
 
 # Chạy ứng dụng
 if __name__ == "__main__":
-    main() 
+    # main() 
+    # Bạn nên comment out (hoặc xóa) main() nếu không muốn Streamlit chạy
+    # main() 
+    
+    # --- BẮT ĐẦU KIỂM TRA ---
+    
+    # 1. Truy vấn bằng tiếng Việt về chủ đề đã có trong dữ liệu
+    test_retriever_query("Cach su dung UV")
+    
+    # 2. Truy vấn khác
+    # test_retriever_query("Các bước để kết nối tới Milvus là gì?")
+    
+    # 3. Truy vấn về công nghệ
+    # test_retriever_query("LangChain là gì?")
