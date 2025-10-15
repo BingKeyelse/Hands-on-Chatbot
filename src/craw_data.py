@@ -34,17 +34,19 @@ def load_data_from_local(filename: str, directory: str):
     # Chọn loader phù hợp
     if ext == 'pdf':
         # loader = PyPDFLoader(file_path)
-        loader = PyPDFLoader(file_path)
-        docs = loader.load()
+        # docs = loader.load()
 
-        # 🧠 Gộp toàn bộ nội dung các trang lại thành 1 document duy nhất
-        merged_text = "\n".join([d.page_content for d in docs])
-        documents = [
-            Document(
-                page_content=merged_text,
-                metadata={"source": file_path}
-            )
-        ]
+        # # 🧠 Gộp toàn bộ nội dung các trang lại thành 1 document duy nhất
+        # merged_text = "\n".join([d.page_content for d in docs])
+        # documents = [
+        #     Document(
+        #         page_content=merged_text,
+        #         metadata={"source": file_path}
+        #     )
+        # ]
+        loader = PyPDFLoader(file_path)
+        # Không gộp nữa, để loader trả về các trang riêng biệt
+        documents = loader.load()
     elif ext == 'txt':
         loader = TextLoader(file_path, encoding='utf-8')
         documents = loader.load()
@@ -65,25 +67,12 @@ def load_data_from_local(filename: str, directory: str):
     return documents, filename, ext
 
 def bs4_extractor(html: str) -> str:
-    """
-    Hàm trích xuất và làm sạch nội dung từ HTML
-    Args:
-        html: Chuỗi HTML cần xử lý
-    Returns:
-        str: Văn bản đã được làm sạch, loại bỏ các thẻ HTML và khoảng trắng thừa
-    """
+
     soup = BeautifulSoup(html, "html.parser")  # Phân tích cú pháp HTML
     return re.sub(r"\n\n+", "\n\n", soup.text).strip()  # Xóa khoảng trắng và dòng trống thừa
 
 def crawl_web(url_data):
-    """
-    Hàm crawl dữ liệu từ URL với chế độ đệ quy
-    Args:
-        url_data (str): URL gốc để bắt đầu crawl
-    Returns:
-        list: Danh sách các Document object, mỗi object chứa nội dung đã được chia nhỏ
-              và metadata tương ứng
-    """
+
     # Tạo loader với độ sâu tối đa là 4 cấp
     loader = RecursiveUrlLoader(url=url_data, extractor=bs4_extractor, max_depth=4)
     docs = loader.load()  # Tải nội dung

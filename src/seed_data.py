@@ -28,8 +28,9 @@ load_dotenv()
 from craw_data import load_data_from_local, crawl_web
 
 # Khởi tạo model embeddings
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 # embeddings = HuggingFaceEmbeddings(model_name="google/embeddinggemma-300m")
+embeddings = HuggingFaceEmbeddings(model_name="intfloat/e5-large-v2")
 
 
 def seed_milvus_local(URI_link: str, collection_name: str, filenames: list, directory: str) -> Milvus:
@@ -56,7 +57,6 @@ def seed_milvus_local(URI_link: str, collection_name: str, filenames: list, dire
 
     # Truy cập trực tiếp collection trong Milvus (để query / delete)
     collection = Collection(collection_name)
-
 
     # Lấy thời gian hiện tại
     current_time = datetime.now().strftime("%Y-%m-%d")
@@ -107,7 +107,6 @@ def seed_milvus_local(URI_link: str, collection_name: str, filenames: list, dire
     return vectorstore
 
 def seed_milvus_live(URL: str, URI_link: str, collection_name: str) -> Milvus:
-
     # --- Kết nối tới Milvus ---
     print("🔗 Kết nối tới Milvus...")
     connections.connect("default", uri=URI_link)
@@ -178,17 +177,6 @@ def seed_milvus_live(URL: str, URI_link: str, collection_name: str) -> Milvus:
     return vectorstore
 
 def connect_to_milvus(URI_link: str, collection_name: str) -> Milvus:
-    """
-    Hàm kết nối đến collection có sẵn trong Milvus
-    Args:
-        URI_link (str): Đường dẫn kết nối đến Milvus
-        collection_name (str): Tên collection cần kết nối
-    Returns:
-        Milvus: Đối tượng Milvus đã được kết nối, sẵn sàng để truy vấn
-    Chú ý:
-        - Không tạo collection mới hoặc xóa dữ liệu cũ
-        - Sử dụng model 'text-embedding-3-large' cho việc tạo embeddings khi truy vấn
-    """
     vectorstore = Milvus(
         embedding_function=embeddings,
         connection_args={"uri": URI_link},

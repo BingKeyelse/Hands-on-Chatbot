@@ -27,11 +27,7 @@ def setup_page():
 
 # === KHỞI TẠO ỨNG DỤNG ===
 def initialize_app():
-    """
-    Khởi tạo các cài đặt cần thiết:
-    - Đọc file .env chứa API key
-    - Cấu hình trang web
-    """
+
     setup_page()  # Thiết lập giao diện
 
 # === THANH CÔNG CỤ BÊN TRÁI ===
@@ -99,34 +95,21 @@ def handle_url_input():
         st.success("Đã crawl dữ liệu thành công!")
 
 # === GIAO DIỆN CHAT CHÍNH ===
+# === GIAO DIỆN CHAT CHÍNH ===
 def setup_chat_interface():
-    """
-    Tạo giao diện chat chính:
-    1. Hiển thị tiêu đề
-    2. Khởi tạo lịch sử chat
-    3. Hiển thị các tin nhắn
-    """
     st.title("💬 AI Assistant")
-    st.caption("🚀 Trợ lý AI được hỗ trợ bởi LangChain và OpenAI")
-
-    # Khởi tạo bộ nhớ chat
-    msgs = StreamlitChatMessageHistory(key="chat_messages")
     
-    # BƯỚC 1: KHỞI TẠO st.session_state.messages NẾU CHƯA TỒN TẠI
+
+    st.caption("🚀 Trợ lý AI được hỗ trợ bởi LangChain và Ollama")
+    
+    msgs = StreamlitChatMessageHistory(key="langchain_messages")
+    
     if "messages" not in st.session_state:
-        st.session_state.messages = [] # Khởi tạo danh sách rỗng
+        st.session_state.messages = [
+            {"role": "assistant", "content": "Tôi có thể giúp gì cho bạn?"}
+        ]
+        msgs.add_ai_message("Tôi có thể giúp gì cho bạn?")
 
-    # BƯỚC 2: KHỞI TẠO StreamlitChatMessageHistory (sẽ liên kết với st.session_state.messages)
-    msgs = StreamlitChatMessageHistory(key="chat_messages") 
-    
-    # BƯỚC 3: ĐỒNG BỘ TIN NHẮN CHÀO MỪNG (Nếu lịch sử chat hoàn toàn trống)
-    if len(st.session_state.messages) == 0:
-        greeting = "Tôi có thể giúp gì cho bạn?"
-        st.session_state.messages.append({"role": "assistant", "content": greeting})
-        # Quan trọng: Add vào msgs để đồng bộ với LangChain/Agent Executor
-        msgs.add_ai_message(greeting) 
-
-    # Hiển thị lịch sử chat
     for msg in st.session_state.messages:
         role = "assistant" if msg["role"] == "assistant" else "human"
         st.chat_message(role).write(msg["content"])
@@ -134,29 +117,43 @@ def setup_chat_interface():
     return msgs
 
 # === XỬ LÝ TIN NHẮN NGƯỜI DÙNG ===
-# HÀM CHỈ NHẬN agent_executor
-def handle_user_input(agent_executor): 
-    
+# === XỬ LÝ TIN NHẮN NGƯỜI DÙNG ===
+def handle_user_input(msgs, agent_executor):
+    """
+    Xử lý khi người dùng gửi tin nhắn:
+    1. Hiển thị tin nhắn người dùng
+    2. Gọi AI xử lý và trả lời
+    3. Lưu vào lịch sử chat
+    """
     if prompt := st.chat_input("Hãy hỏi tôi bất cứ điều gì về Stack AI!"):
         # Lưu và hiển thị tin nhắn người dùng
         st.session_state.messages.append({"role": "human", "content": prompt})
         st.chat_message("human").write(prompt)
-        # ❌ Đảm bảo bạn đã XÓA DÒNG NÀY: msgs.add_user_message(prompt)
+        msgs.add_user_message(prompt)
 
         # Xử lý và hiển thị câu trả lời
         with st.chat_message("assistant"):
-            st_callback = StreamlitCallbackHandler(st.empty()) 
+            st_callback = StreamlitCallbackHandler(st.container())
             
-            # GỌI AI CHỈ VỚI INPUT
+            # Lấy lịch sử chat
+            chat_history = [
+                {"role": msg["role"], "content": msg["content"]}
+                for msg in st.session_state.messages[:-1]
+            ]
+
+            # Gọi AI xử lý
             response = agent_executor.invoke(
-                {"input": prompt}, # <-- PHẢI CHỈ CÓ INPUT!
+                {
+                    "input": prompt,
+                    "chat_history": chat_history
+                },
                 {"callbacks": [st_callback]}
             )
 
             # Lưu và hiển thị câu trả lời
             output = response["output"]
             st.session_state.messages.append({"role": "assistant", "content": output})
-            # ❌ Đảm bảo bạn đã XÓA DÒNG NÀY: msgs.add_ai_message(output)
+            msgs.add_ai_message(output)
             st.write(output)
 
 # === HÀM CHÍNH ===
@@ -171,7 +168,7 @@ def main():
     setup_sidebar()
     
     # 💡 SỬA: CHỈ GỌI setup_chat_interface(), KHÔNG GÁN VÀ SỬ DỤNG MSGS NỮA
-    setup_chat_interface() 
+    msgs = setup_chat_interface()
 
     retriever = get_retriever()
     llm_instance = get_local_llm()
@@ -179,7 +176,7 @@ def main():
     agent_executor = get_llm_and_agent(retriever, llm_instance) 
 
     # 💡 SỬA: CHỈ GỌI HÀM VỚI agent_executor
-    handle_user_input(agent_executor) 
+    handle_user_input(msgs, agent_executor) 
 
 def test_retriever_query(query: str):
     """
@@ -200,9 +197,10 @@ def test_retriever_query(query: str):
         for i, doc in enumerate(results):
             # In nội dung ngắn gọn và nguồn
             content_snippet = doc.page_content[:200] + "..."
-            source = doc.metadata.get('source', 'N/A')
+            name = doc.metadata.get('doc_name', 'N/A')
+            # source = doc.metadata.get('source', 'N/A')
             print(f"--- Document {i+1} ---")
-            print(f"Nguồn: {source}")
+            print(f"Nguồn: {name}")
             # print(f"Nội dung: {content_snippet}")
             print("-" * 15)
 
@@ -212,17 +210,5 @@ def test_retriever_query(query: str):
 
 # Chạy ứng dụng
 if __name__ == "__main__":
-    # main() 
-    # Bạn nên comment out (hoặc xóa) main() nếu không muốn Streamlit chạy
-    # main() 
-    
-    # --- BẮT ĐẦU KIỂM TRA ---
-    
-    # 1. Truy vấn bằng tiếng Việt về chủ đề đã có trong dữ liệu
-    test_retriever_query("Cach su dung UV")
-    
-    # 2. Truy vấn khác
-    # test_retriever_query("Các bước để kết nối tới Milvus là gì?")
-    
-    # 3. Truy vấn về công nghệ
-    # test_retriever_query("LangChain là gì?")
+    main() 
+   
